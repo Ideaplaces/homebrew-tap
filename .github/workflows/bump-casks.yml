@@ -1,0 +1,78 @@
+name: Bump casks
+
+# The tap updates itself rather than being pushed to from each app's repo.
+#
+# A cross-repo push would need a credential this org cannot issue: deploy keys
+# are disabled, and a PAT or GitHub App cannot be created without a browser.
+# Inverting it removes the problem instead of working around it. A workflow can
+# always write to its own repository with the built-in GITHUB_TOKEN, and reading
+# a public repo's releases needs no auth at all, so this needs no secret to
+# create, store, leak or rotate.
+#
+# Runs on a schedule so a release is picked up on its own, and on demand when
+# you do not want to wait.
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bump each cask to its project's latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          # cask file : source repo
+          CASKS="Casks/agent-inbox.rb:Ideaplaces/agent-inbox"
+
+          changed=0
+          for entry in $CASKS; do
+            cask="${entry%%:*}"
+            repo="${entry##*:}"
+            [ -f "$cask" ] || { echo "$cask missing, skipping"; continue; }
+
+            current="$(sed -n 's/^  version "\(.*\)"$/\1/p' "$cask")"
+            tag="$(gh release view --repo "$repo" --json tagName --jq .tagName)"
+            latest="${tag#v}"
+
+            if [ "$current" = "$latest" ]; then
+              echo "$cask already at $latest"
+              continue
+            fi
+
+            # Take the checksum from the published asset, never compute it from
+            # a rebuild: the cask must describe the exact bytes users download.
+            asset="$(gh release view "$tag" --repo "$repo" --json assets \
+              --jq '.assets[] | select(.name|endswith(".dmg")) | .url')"
+            [ -n "$asset" ] || { echo "no dmg on $tag, skipping $cask"; continue; }
+            curl -fsSL "$asset" -o /tmp/asset.dmg
+            sha="$(sha256sum /tmp/asset.dmg | cut -d' ' -f1)"
+            rm -f /tmp/asset.dmg
+
+            sed -i "s/^  version \".*\"$/  version \"$latest\"/" "$cask"
+            sed -i "s/^  sha256 \".*\"$/  sha256 \"$sha\"/" "$cask"
+            echo "$cask: $current -> $latest"
+            changed=1
+          done
+
+          if [ "$changed" = "0" ]; then
+            echo "nothing to do"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks
+          git commit -m "Bump casks to the latest releases"
+          git push
