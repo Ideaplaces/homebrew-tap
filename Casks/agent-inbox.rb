@@ -1,6 +1,6 @@
 cask "agent-inbox" do
-  version "0.1.18"
-  sha256 "cccb697a714eb7986b90ee7227ac4e487ef439512998534445c63d657ed5665a"
+  version "0.1.21"
+  sha256 "46bb52bc163f4203dc423579c9df9c98ae9c92e88c757e161229d9e309fdbaed"
 
   url "https://github.com/Ideaplaces/agent-inbox/releases/download/v#{version}/AgentInbox-#{version}.dmg",
       verified: "github.com/Ideaplaces/agent-inbox/"
