@@ -17,6 +17,18 @@ cask "agent-inbox" do
 
   app "Agent Inbox.app"
 
+  # Open it once the files are in place.
+  #
+  # A cask copies a bundle and stops. For a menubar app that is the whole
+  # install failing quietly: nothing is running, nothing is in Login Items,
+  # no hooks are written, and the first sign of it is a day with no
+  # notifications. The app's own first launch does the rest, so this one line
+  # is the difference between "installed" and "working". On an upgrade the
+  # `uninstall quit:` above has just closed it, so this puts it back.
+  postflight do
+    system_command "/usr/bin/open", args: ["-a", "#{appdir}/Agent Inbox.app"]
+  end
+
   uninstall quit: "com.ideaplaces.agent-inbox"
 
   # The hooks in ~/.claude/settings.json and the unpacked notify.sh are removed
