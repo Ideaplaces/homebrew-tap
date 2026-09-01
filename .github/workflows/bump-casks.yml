@@ -53,9 +53,19 @@ jobs:
 
             # Take the checksum from the published asset, never compute it from
             # a rebuild: the cask must describe the exact bytes users download.
+            #
+            # Matched on the versioned name, not on ".dmg". A release also
+            # carries a stable-named copy so the README can link a download URL
+            # that never changes, and "ends with .dmg" would select both: two
+            # URLs into one curl, a checksum over the wrong bytes, and a cask
+            # that quietly stops bumping. The name below can match only one.
+            # Piped into jq rather than using `gh --jq`, which takes a single
+            # expression and no --arg, so the version cannot be passed in.
             asset="$(gh release view "$tag" --repo "$repo" --json assets \
-              --jq '.assets[] | select(.name|endswith(".dmg")) | .url')"
-            [ -n "$asset" ] || { echo "no dmg on $tag, skipping $cask"; continue; }
+              | jq -r --arg v "$latest" '.assets[] | select(.name|endswith("-\($v).dmg")) | .url')"
+            [ -n "$asset" ] || { echo "no versioned dmg on $tag, skipping $cask"; continue; }
+            [ "$(printf '%s\n' "$asset" | wc -l)" -eq 1 ] \
+              || { echo "$tag has more than one versioned dmg, skipping $cask"; continue; }
             curl -fsSL "$asset" -o /tmp/asset.dmg
             sha="$(sha256sum /tmp/asset.dmg | cut -d' ' -f1)"
             rm -f /tmp/asset.dmg
